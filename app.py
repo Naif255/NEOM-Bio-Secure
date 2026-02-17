@@ -1,11 +1,3 @@
-%%writefile app.py
-#!/usr/bin/env python3
-"""
-NEOM Bio-Secure: AI-Powered Bird Strike Prediction System
-Advanced Thermal Detection & Aviation Safety Platform
-Designed for NEOM Smart City Aviation Operations
-"""
-
 import streamlit as st
 import pandas as pd
 import numpy as np
