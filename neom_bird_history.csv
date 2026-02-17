@@ -1,0 +1,111 @@
+# STEP 2: Generate Synthetic Historical Bird Strike Dataset
+print("📊 Generating synthetic NEOM bird strike historical data...")
+
+import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+
+# Set random seed for reproducibility
+np.random.seed(42)
+
+# Generate 5000 records over 3 years
+start_date = datetime(2021, 1, 1)
+n_records = 5000
+
+def generate_neom_bird_data(n_samples=5000):
+    """Generate realistic bird strike data for NEOM region"""
+    
+    data = []
+    
+    for i in range(n_samples):
+        # Generate random date over 3 years
+        random_days = np.random.randint(0, 1095)  # 3 years = ~1095 days
+        current_date = start_date + timedelta(days=random_days)
+        
+        # Extract month for seasonal patterns
+        month = current_date.month
+        
+        # NEOM Desert Climate Temperature (Realistic)
+        # Summer: 35-45°C, Winter: 15-25°C, Spring/Autumn: 25-35°C
+        if month in [6, 7, 8]:  # Summer
+            base_temp = np.random.normal(40, 3)
+        elif month in [12, 1, 2]:  # Winter
+            base_temp = np.random.normal(20, 3)
+        else:  # Spring/Autumn
+            base_temp = np.random.normal(30, 4)
+        
+        temperature = np.clip(base_temp, 15, 45)  # Realistic bounds
+        
+        # Wind Speed (Red Sea coastal patterns)
+        # Higher winds during winter, calmer during thermal hours
+        if month in [11, 12, 1, 2, 3]:  # Windy season
+            wind_speed = np.random.exponential(25) + 5
+        else:  # Calmer season
+            wind_speed = np.random.exponential(15) + 3
+        
+        wind_speed = np.clip(wind_speed, 0, 80)
+        
+        # Migration Season (Binary: 1=Active, 0=Inactive)
+        # Peak migration: March-May (Spring) and September-November (Autumn)
+        migration_season = 1 if month in [3, 4, 5, 9, 10, 11] else 0
+        
+        # RISK EVENT LOGIC (Realistic Bird Strike Probability)
+        risk_probability = 0.15  # Base 15% chance
+        
+        # Factor 1: Thermal Conditions (Birds love thermals for soaring)
+        if 28 <= temperature <= 38 and wind_speed < 25:
+            risk_probability += 0.25  # +25% for ideal thermal conditions
+        
+        # Factor 2: Migration Season (Higher bird activity)
+        if migration_season == 1:
+            risk_probability += 0.20  # +20% during migration
+        
+        # Factor 3: High Winds (Disrupt bird flight patterns)
+        if wind_speed > 50:
+            risk_probability -= 0.15  # -15% for high winds
+        
+        # Factor 4: Extreme Temperatures (Birds avoid extreme conditions)
+        if temperature > 42 or temperature < 18:
+            risk_probability -= 0.10  # -10% for extreme temps
+        
+        # Factor 5: Optimal soaring conditions
+        if migration_season == 1 and 30 <= temperature <= 35 and 10 <= wind_speed <= 20:
+            risk_probability += 0.15  # Perfect conditions for large flocks
+        
+        # Cap probability between 5% and 70%
+        risk_probability = np.clip(risk_probability, 0.05, 0.70)
+        
+        # Generate risk event based on probability
+        risk_event = 1 if np.random.random() < risk_probability else 0
+        
+        # Store record
+        data.append({
+            'Date': current_date.strftime('%Y-%m-%d'),
+            'Temperature': round(temperature, 1),
+            'Wind_Speed': round(wind_speed, 1),
+            'Migration_Season': migration_season,
+            'Risk_Event': risk_event
+        })
+    
+    return pd.DataFrame(data)
+
+# Generate the dataset
+print("🔄 Creating 5,000 historical records with realistic patterns...")
+bird_data = generate_neom_bird_data(5000)
+
+# Save to CSV
+bird_data.to_csv('neom_bird_history.csv', index=False)
+
+# Display statistics
+print(f"✅ Dataset created: {len(bird_data):,} records")
+print(f"📅 Date range: {bird_data['Date'].min()} to {bird_data['Date'].max()}")
+print(f"🌡️ Temperature range: {bird_data['Temperature'].min()}°C to {bird_data['Temperature'].max()}°C")
+print(f"💨 Wind speed range: {bird_data['Wind_Speed'].min()} to {bird_data['Wind_Speed'].max()} km/h")
+print(f"🦅 Migration periods: {bird_data['Migration_Season'].sum():,} records")
+print(f"⚠️ Risk events: {bird_data['Risk_Event'].sum():,} events ({bird_data['Risk_Event'].mean()*100:.1f}% rate)")
+
+# Show sample data
+print("\n📋 Sample data preview:")
+print(bird_data.head(10))
+
+print("\n💾 Data saved as 'neom_bird_history.csv'")
