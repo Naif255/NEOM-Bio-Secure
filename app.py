@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ========================================
-# NEOM CONFIGURATION & BRANDING
+# 1. NEOM CONFIGURATION & BRANDING
 # ========================================
 
 st.set_page_config(
@@ -32,14 +32,13 @@ NEOM_COLORS = {
 }
 
 # ========================================
-# DATA GENERATION ENGINE (SIMULATION MODE)
+# 2. DATA GENERATION ENGINE (SIMULATION)
 # ========================================
 
 @st.cache_data
 def load_historical_data():
     """Generate Advanced NEOM Bird Strike Simulation Data"""
     try:
-        # Simulation Parameters
         np.random.seed(42)
         rows = 5000
         dates = pd.date_range(start='2024-01-01', periods=rows, freq='H')
@@ -55,17 +54,16 @@ def load_historical_data():
         # Clip realistic values
         data['Temperature'] = data['Temperature'].clip(5, 50)
         
-        # Smart Risk Logic (Creating patterns for AI to learn)
-        # Risk increases if: Migration is ON + Wind is LOW + Temp is MODERATE
+        # Smart Risk Logic
         conditions = (
             (data['Migration_Season'] == 1) & 
             (data['Wind_Speed'] < 25) & 
             (data['Temperature'].between(20, 38))
         )
         
-        # Assign Risk Event based on logic + some random noise
         data['Risk_Event'] = np.where(conditions, 1, 0)
-        noise = np.random.choice([0, 1], rows, p=[0.95, 0.05]) # 5% randomness
+        # Add slight noise for realism
+        noise = np.random.choice([0, 1], rows, p=[0.95, 0.05])
         data['Risk_Event'] = data['Risk_Event'] | noise
 
         return data, True
@@ -75,7 +73,7 @@ def load_historical_data():
         return None, False
 
 # ========================================
-# MACHINE LEARNING MODEL
+# 3. MACHINE LEARNING MODEL
 # ========================================
 
 @st.cache_resource
@@ -112,24 +110,23 @@ def train_prediction_model(data):
         'Importance': model.feature_importances_
     }).sort_values('Importance', ascending=False)
     
+    # === FIX: Returns exactly 3 values ===
     return model, accuracy, importance_df
 
 def predict_strike_risk(model, temperature, wind_speed, migration_season):
     """Predict bird strike probability"""
     features = np.array([[temperature, wind_speed, migration_season]])
     try:
-        prob = model.predict_proba(features)[0][1] * 100  # Probability of risk event
+        prob = model.predict_proba(features)[0][1] * 100
         return min(100, max(0, prob))
     except:
-        return 50.0  # Fallback
+        return 50.0
 
 # ========================================
-# ADVANCED UI COMPONENTS
+# 4. ADVANCED UI COMPONENTS
 # ========================================
 
 def create_neom_gauge(risk_percentage):
-    """Create professional NEOM-themed gauge chart"""
-    
     if risk_percentage < 30:
         color, status = NEOM_COLORS['success'], "SAFE / آمن"
     elif risk_percentage < 60:
@@ -153,15 +150,12 @@ def create_neom_gauge(risk_percentage):
             ]
         }
     ))
-    
     fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", font={'color': "white"})
     return fig
 
 def create_historical_analysis(data):
-    """Create advanced scatter plot for historical analysis"""
-    
     fig = px.scatter(
-        data.sample(500), # Sample for better visuals
+        data.sample(500),
         x='Temperature',
         y='Wind_Speed',
         color='Risk_Event',
@@ -170,7 +164,6 @@ def create_historical_analysis(data):
         title="<b>Historical Analysis: Weather vs Risk</b>",
         labels={'Risk_Event': 'Risk Level'}
     )
-    
     fig.update_layout(
         plot_bgcolor="rgba(26, 26, 46, 0.8)",
         paper_bgcolor="rgba(0,0,0,0)",
@@ -180,13 +173,11 @@ def create_historical_analysis(data):
     return fig
 
 def create_risk_recommendation(risk_pct):
-    """Generate detailed risk recommendations"""
     if risk_pct >= 60:
         return {
             'level': '🚨 CRITICAL ALERT',
             'action': 'HALT OPERATIONS',
             'color': NEOM_COLORS['danger'],
-            'details': 'High probability of bird strikes detected.',
             'recommendations': ['Suspend takeoffs', 'Deploy acoustic deterrents', 'Alert ground control']
         }
     elif risk_pct >= 30:
@@ -194,7 +185,6 @@ def create_risk_recommendation(risk_pct):
             'level': '⚠️ CAUTION',
             'action': 'ENHANCED MONITORING',
             'color': NEOM_COLORS['warning'],
-            'details': 'Moderate bird activity expected.',
             'recommendations': ['Notify pilots', 'Increase visual scanning', 'Review weather updates']
         }
     else:
@@ -202,12 +192,11 @@ def create_risk_recommendation(risk_pct):
             'level': '🟢 ALL CLEAR',
             'action': 'NORMAL OPS',
             'color': NEOM_COLORS['success'],
-            'details': 'Conditions are safe for flight.',
             'recommendations': ['Continue standard procedure', 'Log routine check']
         }
 
 # ========================================
-# MAIN APPLICATION
+# 5. MAIN APPLICATION
 # ========================================
 
 def main():
@@ -228,7 +217,8 @@ def main():
     data, loaded = load_historical_data()
     
     if loaded:
-        model, acc, importance, importance_df = train_prediction_model(data)
+        # === FIX: Unpack exactly 3 values ===
+        model, acc, importance_df = train_prediction_model(data)
         
         # Sidebar
         st.sidebar.header("📡 Live Sensors")
@@ -265,7 +255,11 @@ def main():
         c1, c2, c3 = st.columns(3)
         c1.metric("Model Accuracy", f"{acc:.1%}")
         c2.metric("Total Records Analyzed", f"{len(data):,}")
-        c3.metric("System Status", "ONLINE", delta="Active")
+        
+        # Feature Importance (Bonus for Experts)
+        with c3:
+            top_feature = importance_df.iloc[0]['Feature']
+            st.metric("Top Risk Factor", top_feature)
 
 if __name__ == "__main__":
     main()
