@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════╗
-║          NEOM Bio-Secure  —  Version 5.0                        ║
+║       NEOM Bio-Secure  —  Version 6.0  (Enterprise Edition)     ║
 ║    AI-Powered Bird Strike Risk Prediction Platform               ║
 ║    NEOM Smart City  |  Aviation Safety Division                  ║
 ╚══════════════════════════════════════════════════════════════════╝
@@ -16,16 +16,16 @@ import plotly.graph_objects as go
 import plotly.express as px
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score
 import requests
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # ════════════════════════════════════════════════════════════════
 # 1.  PAGE CONFIG & BRANDING
 # ════════════════════════════════════════════════════════════════
 
 st.set_page_config(
-    page_title="NEOM Bio-Secure v5.0",
+    page_title="NEOM Bio-Secure v6.0",
     page_icon="🦅",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -39,14 +39,17 @@ NEOM = {
     "success":    "#00FF88",   # Bright Green
     "warning":    "#FFD700",   # Gold
     "danger":     "#FF4444",   # Red
+    "dawn":       "#FF8C42",   # Dawn / Dusk Orange
     "text":       "#FFFFFF",   # White
     "muted":      "#A0AEC0",   # Muted text
 }
 
-# NEOM coordinates
+# NEOM coordinates & timezone
 NEOM_LAT = 28.2933
-NEOM_LON = 35.0000
+NEOM_LON  = 35.0000
+NEOM_TZ   = timezone(timedelta(hours=3))   # Saudi Arabia Time: UTC+3
 MIGRATION_MONTHS = {3, 4, 5, 9, 10, 11}   # Mar–May, Sep–Nov
+
 
 # ════════════════════════════════════════════════════════════════
 # 2.  GLOBAL CSS — NEOM DARK THEME
@@ -153,7 +156,28 @@ def inject_css():
         font-size: 0.78rem;
         font-weight: 600;
         letter-spacing: 0.5px;
+        margin-bottom: 6px;
+        margin-right: 6px;
+    }}
+
+    /* ── Circadian Badge ── */
+    .circadian-badge {{
+        display: inline-block;
+        padding: 5px 16px;
+        border-radius: 20px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.6px;
         margin-bottom: 10px;
+        margin-right: 6px;
+    }}
+
+    /* ── Multiplier info box ── */
+    .multiplier-box {{
+        border-radius: 10px;
+        padding: 10px 16px;
+        margin-bottom: 12px;
+        font-size: 0.85rem;
     }}
 
     /* ── Status pill ── */
@@ -194,7 +218,62 @@ def inject_css():
 
 
 # ════════════════════════════════════════════════════════════════
-# 3.  SYNTHETIC DATA GENERATION  (self-contained, no CSV)
+# 3.  CIRCADIAN RHYTHM INTELLIGENCE  (Biological Logic)
+# ════════════════════════════════════════════════════════════════
+
+def get_neom_hour() -> int:
+    """Return current hour (0–23) in NEOM local time (Saudi Arabia: UTC+3)."""
+    return datetime.now(tz=NEOM_TZ).hour
+
+
+def get_circadian_info() -> dict:
+    """
+    Determine bird-activity period based on NEOM local time.
+
+    Periods & risk multipliers:
+    • Dawn  05:00–06:59  → 1.4x  (Peak — birds most active)
+    • Dusk  17:00–18:59  → 1.4x  (Peak — birds most active)
+    • Day   07:00–16:59  → 1.0x  (Normal activity)
+    • Night 19:00–04:59  → 0.8x  (Reduced activity)
+    """
+    hour = get_neom_hour()
+
+    if 5 <= hour < 7:
+        return {
+            "period":     "DAWN",
+            "badge":      "🌅 DAWN — HIGH BIRD ACTIVITY",
+            "multiplier": 1.4,
+            "color":      NEOM["dawn"],
+            "desc":       f"Peak activity window · Hour {hour:02d}:xx SAT",
+        }
+    elif 17 <= hour < 19:
+        return {
+            "period":     "DUSK",
+            "badge":      "🌆 DUSK — HIGH BIRD ACTIVITY",
+            "multiplier": 1.4,
+            "color":      NEOM["dawn"],
+            "desc":       f"Peak activity window · Hour {hour:02d}:xx SAT",
+        }
+    elif 7 <= hour < 17:
+        return {
+            "period":     "DAY",
+            "badge":      "☀️ DAYTIME — NORMAL ACTIVITY",
+            "multiplier": 1.0,
+            "color":      NEOM["warning"],
+            "desc":       f"Standard activity levels · Hour {hour:02d}:xx SAT",
+        }
+    else:
+        return {
+            "period":     "NIGHT",
+            "badge":      "🌙 NIGHT — REDUCED ACTIVITY",
+            "multiplier": 0.8,
+            "color":      NEOM["muted"],
+            "desc":       f"Low activity window · Hour {hour:02d}:xx SAT",
+        }
+
+
+# ════════════════════════════════════════════════════════════════
+# 4.  SYNTHETIC DATA GENERATION  (self-contained, no CSV)
 # ════════════════════════════════════════════════════════════════
 
 @st.cache_data(show_spinner=False)
@@ -206,27 +285,15 @@ def generate_training_data() -> pd.DataFrame:
     dates = pd.date_range(start="2022-01-01", periods=n, freq="H")
     months = dates.month
 
-    # Temperature: seasonal sinusoidal pattern around NEOM climate
     temp_base = 28 + 14 * np.sin((months - 3) * np.pi / 6)
-    temperature = np.clip(
-        rng.normal(loc=temp_base, scale=4.5), 8, 52
-    )
+    temperature = np.clip(rng.normal(loc=temp_base, scale=4.5), 8, 52)
 
-    # Wind speed: right-skewed (calm most of the time, gusts occasionally)
-    wind_speed = np.clip(
-        rng.gamma(shape=2, scale=7, size=n), 0, 75
-    )
+    wind_speed = np.clip(rng.gamma(shape=2, scale=7, size=n), 0, 75)
 
-    # Migration season: truth derived from month
     migration_season = np.where(np.isin(months, list(MIGRATION_MONTHS)), 1, 0)
-    # Add 5% label noise for realism
     flip_mask = rng.random(n) < 0.05
     migration_season = np.where(flip_mask, 1 - migration_season, migration_season)
 
-    # Risk logic  ─  higher probability when:
-    #   • migration active
-    #   • calm winds  (birds fly more in calm conditions)
-    #   • temperature in sweet-spot 18 – 40 °C
     base_risk_prob = (
         0.55 * migration_season
         + 0.25 * np.where(wind_speed < 20, 1, 0)
@@ -246,7 +313,7 @@ def generate_training_data() -> pd.DataFrame:
 
 
 # ════════════════════════════════════════════════════════════════
-# 4.  RANDOM FOREST MODEL
+# 5.  RANDOM FOREST MODEL
 # ════════════════════════════════════════════════════════════════
 
 @st.cache_resource(show_spinner=False)
@@ -270,8 +337,7 @@ def train_model(df: pd.DataFrame):
     )
     clf.fit(X_train, y_train)
 
-    y_pred = clf.predict(X_test)
-    acc = accuracy_score(y_test, y_pred)
+    acc = accuracy_score(y_test, clf.predict(X_test))
 
     importance_df = (
         pd.DataFrame({"Feature": features, "Importance": clf.feature_importances_})
@@ -288,12 +354,14 @@ def predict_risk(model, temperature: float, wind_speed: float, migration: int) -
 
 
 # ════════════════════════════════════════════════════════════════
-# 5.  LIVE WEATHER — OPEN-METEO API  (no key required)
+# 6.  LIVE WEATHER — OPEN-METEO API  (Smart Caching — 15 min TTL)
 # ════════════════════════════════════════════════════════════════
 
-def fetch_live_weather() -> dict:
+@st.cache_data(ttl=900, show_spinner=False)
+def get_live_neom_weather() -> dict:
     """
     Fetch current temperature & wind speed for NEOM via Open-Meteo.
+    Cached for 15 minutes (TTL=900s) to prevent 429 Too Many Requests.
     Returns dict with keys: temperature, wind_speed, source, error.
     """
     url = (
@@ -326,21 +394,28 @@ def fetch_live_weather() -> dict:
 
 
 def auto_migration_season() -> int:
-    """Return 1 if current month is a migration month for NEOM region."""
+    """Return 1 if current month is a migration month for the NEOM region."""
     return 1 if datetime.now().month in MIGRATION_MONTHS else 0
 
 
 # ════════════════════════════════════════════════════════════════
-# 6.  PLOTLY CHARTS
+# 7.  PLOTLY CHARTS
 # ════════════════════════════════════════════════════════════════
 
-def make_gauge(risk_pct: float) -> go.Figure:
+def make_gauge(risk_pct: float, multiplier: float = 1.0) -> go.Figure:
+    """Render the risk gauge. Color and label react to the circadian multiplier."""
     if risk_pct < 30:
         bar_color, status_label = NEOM["success"], "SAFE  /  آمن"
     elif risk_pct < 60:
         bar_color, status_label = NEOM["warning"], "CAUTION  /  حذر"
     else:
         bar_color, status_label = NEOM["danger"], "DANGER  /  خطر"
+
+    multiplier_tag = ""
+    if multiplier > 1.0:
+        multiplier_tag = f"<br><span style='font-size:0.72em;color:{NEOM['dawn']};'>⚡ {multiplier}x Circadian Boost</span>"
+    elif multiplier < 1.0:
+        multiplier_tag = f"<br><span style='font-size:0.72em;color:{NEOM['muted']};'>🌙 {multiplier}x Night Reduction</span>"
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
@@ -353,6 +428,7 @@ def make_gauge(risk_pct: float) -> go.Figure:
             "text": (
                 f"<b>Bird Strike Risk</b><br>"
                 f"<span style='font-size:0.82em;color:{bar_color}'>{status_label}</span>"
+                f"{multiplier_tag}"
             ),
             "font": {"size": 16, "color": NEOM["text"]},
         },
@@ -382,8 +458,8 @@ def make_gauge(risk_pct: float) -> go.Figure:
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font={"color": NEOM["text"]},
-        margin={"t": 80, "b": 20, "l": 30, "r": 30},
-        height=320,
+        margin={"t": 100, "b": 20, "l": 30, "r": 30},
+        height=340,
     )
     return fig
 
@@ -398,8 +474,7 @@ def make_scatter(df: pd.DataFrame) -> go.Figure:
         color_discrete_map={"No Risk": NEOM["success"], "Risk": NEOM["danger"]},
         opacity=0.65,
         title="<b>Historical Analysis — Weather Conditions vs Risk Events</b>",
-        labels={"Temperature": "Temperature (°C)",
-                "Wind_Speed":  "Wind Speed (km/h)"},
+        labels={"Temperature": "Temperature (°C)", "Wind_Speed": "Wind Speed (km/h)"},
     )
     fig.update_traces(marker={"size": 6})
     fig.update_layout(
@@ -407,10 +482,8 @@ def make_scatter(df: pd.DataFrame) -> go.Figure:
         paper_bgcolor="rgba(0,0,0,0)",
         font={"color": NEOM["text"]},
         title_font={"size": 14, "color": NEOM["primary"]},
-        legend={"title": "Risk Status",
-                "orientation": "h",
-                "yanchor": "bottom", "y": 1.02,
-                "xanchor": "right",  "x": 1},
+        legend={"title": "Risk Status", "orientation": "h",
+                "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1},
         xaxis={"gridcolor": "rgba(255,255,255,0.094)", "zerolinecolor": "rgba(255,255,255,0.094)"},
         yaxis={"gridcolor": "rgba(255,255,255,0.094)", "zerolinecolor": "rgba(255,255,255,0.094)"},
         margin={"t": 60, "b": 40, "l": 40, "r": 20},
@@ -483,17 +556,17 @@ def make_monthly_risk(df: pd.DataFrame) -> go.Figure:
 
 
 # ════════════════════════════════════════════════════════════════
-# 7.  RECOMMENDATION ENGINE
+# 8.  RECOMMENDATION ENGINE
 # ════════════════════════════════════════════════════════════════
 
 def get_recommendation(risk_pct: float) -> dict:
     if risk_pct >= 60:
         return {
-            "icon":    "🚨",
-            "level":   "CRITICAL ALERT",
-            "action":  "HALT ALL FLIGHT OPERATIONS",
-            "color":   NEOM["danger"],
-            "steps":   [
+            "icon":   "🚨",
+            "level":  "CRITICAL ALERT",
+            "action": "HALT ALL FLIGHT OPERATIONS",
+            "color":  NEOM["danger"],
+            "steps":  [
                 "Immediately suspend all takeoffs and landings",
                 "Activate full acoustic & visual deterrent systems",
                 "Issue NOTAM to all inbound/outbound aircraft",
@@ -503,11 +576,11 @@ def get_recommendation(risk_pct: float) -> dict:
         }
     elif risk_pct >= 30:
         return {
-            "icon":    "⚠️",
-            "level":   "CAUTION — ELEVATED RISK",
-            "action":  "ENHANCED MONITORING PROTOCOL",
-            "color":   NEOM["warning"],
-            "steps":   [
+            "icon":   "⚠️",
+            "level":  "CAUTION — ELEVATED RISK",
+            "action": "ENHANCED MONITORING PROTOCOL",
+            "color":  NEOM["warning"],
+            "steps":  [
                 "Notify all pilots of elevated bird activity",
                 "Increase visual scanning frequency (every 10 min)",
                 "Activate perimeter radar bird-tracking mode",
@@ -517,11 +590,11 @@ def get_recommendation(risk_pct: float) -> dict:
         }
     else:
         return {
-            "icon":    "✅",
-            "level":   "ALL CLEAR",
-            "action":  "NORMAL OPERATIONS",
-            "color":   NEOM["success"],
-            "steps":   [
+            "icon":   "✅",
+            "level":  "ALL CLEAR",
+            "action": "NORMAL OPERATIONS",
+            "color":  NEOM["success"],
+            "steps":  [
                 "Continue standard pre-flight bird-risk assessment",
                 "Log routine environmental check",
                 "No additional deterrent measures required",
@@ -530,7 +603,7 @@ def get_recommendation(risk_pct: float) -> dict:
 
 
 # ════════════════════════════════════════════════════════════════
-# 8.  SIDEBAR
+# 9.  SIDEBAR
 # ════════════════════════════════════════════════════════════════
 
 def build_sidebar():
@@ -540,7 +613,9 @@ def build_sidebar():
             <span style='font-size:2.2rem;'>🦅</span><br>
             <span style='color:{NEOM["primary"]};font-size:1.05rem;font-weight:700;
                          letter-spacing:1px;'>NEOM BIO-SECURE</span><br>
-            <span style='color:{NEOM["muted"]};font-size:0.72rem;'>v5.0 · Aviation Safety AI</span>
+            <span style='color:{NEOM["muted"]};font-size:0.72rem;'>
+                v6.0 Enterprise · Aviation Safety AI
+            </span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -562,11 +637,13 @@ def build_sidebar():
         st.sidebar.markdown(
             f"<small style='color:{NEOM['muted']};'>"
             f"Lat: {NEOM_LAT} &nbsp;|&nbsp; Lon: {NEOM_LON}<br>"
-            f"Source: open-meteo.com (free API)</small>",
+            f"Source: open-meteo.com (free API)<br>"
+            f"Cache TTL: 15 min (anti-rate-limit)</small>",
             unsafe_allow_html=True,
         )
         if st.sidebar.button("🔄 Refresh Live Data", use_container_width=True):
             st.cache_data.clear()
+            st.rerun()
         return mode, None, None, None
 
     else:  # Simulation Mode
@@ -598,21 +675,25 @@ def build_sidebar():
 
 
 # ════════════════════════════════════════════════════════════════
-# 9.  MAIN APPLICATION
+# 10.  MAIN APPLICATION
 # ════════════════════════════════════════════════════════════════
 
 def main():
     inject_css()
 
+    # ── Circadian state (computed once per run) ──────────────────
+    circadian = get_circadian_info()
+
     # ── Header ──────────────────────────────────────────────────
-    now_str = datetime.now().strftime("%d %b %Y  %H:%M")
+    neom_now = datetime.now(tz=NEOM_TZ)
+    now_str  = neom_now.strftime("%d %b %Y  %H:%M SAT (UTC+3)")
     st.markdown(
         f"""
         <div class='neom-header'>
             <h1>🦅 NEOM Bio-Secure</h1>
             <p>AI-Powered Bird Strike Risk Prediction Platform &nbsp;·&nbsp;
                Aviation Safety Division &nbsp;·&nbsp;
-               <span style='color:{NEOM["primary"]};'>v5.0</span>
+               <span style='color:{NEOM["primary"]};'>v6.0 Enterprise</span>
                &nbsp;·&nbsp;
                <span style='color:{NEOM["muted"]};font-size:0.85em;'>{now_str}</span>
             </p>
@@ -623,7 +704,7 @@ def main():
 
     # ── Load data & model (cached) ───────────────────────────────
     with st.spinner("Initialising AI Model — please wait…"):
-        df = generate_training_data()
+        df    = generate_training_data()
         model, accuracy, importance_df = train_model(df)
 
     # ── Sidebar ──────────────────────────────────────────────────
@@ -633,8 +714,8 @@ def main():
     is_live = mode.startswith("🔴")
 
     if is_live:
-        with st.spinner("Fetching live weather from Open-Meteo API…"):
-            weather = fetch_live_weather()
+        with st.spinner("Fetching live weather (cached 15 min)…"):
+            weather = get_live_neom_weather()
 
         if weather["error"]:
             st.warning(
@@ -642,29 +723,33 @@ def main():
                 "falling back to last-known defaults (T=30 °C, W=12 km/h).",
                 icon="📡",
             )
-            temperature  = 30.0
-            wind_speed   = 12.0
-            api_ok       = False
+            temperature = 30.0
+            wind_speed  = 12.0
+            api_ok      = False
         else:
-            temperature  = weather["temperature"]
-            wind_speed   = weather["wind_speed"]
-            api_ok       = True
+            temperature = weather["temperature"]
+            wind_speed  = weather["wind_speed"]
+            api_ok      = True
 
-        migration = auto_migration_season()
+        migration    = auto_migration_season()
         current_month = datetime.now().month
-        month_name = datetime.now().strftime("%B")
+        month_name    = datetime.now().strftime("%B")
 
     else:
-        temperature  = float(sim_temp)
-        wind_speed   = float(sim_wind)
-        migration    = sim_mig
-        api_ok       = None   # N/A in simulation
+        temperature   = float(sim_temp)
+        wind_speed    = float(sim_wind)
+        migration     = sim_mig
+        api_ok        = None   # N/A in simulation
 
-    # ── Prediction ───────────────────────────────────────────────
-    risk_pct = predict_risk(model, temperature, wind_speed, migration)
-    rec      = get_recommendation(risk_pct)
+    # ── Base prediction ──────────────────────────────────────────
+    base_risk = predict_risk(model, temperature, wind_speed, migration)
 
-    # ── Mode badge ───────────────────────────────────────────────
+    # ── Apply Circadian Rhythm Multiplier ────────────────────────
+    risk_pct = float(np.clip(base_risk * circadian["multiplier"], 0.0, 100.0))
+
+    rec = get_recommendation(risk_pct)
+
+    # ── Mode badge + Circadian badge ─────────────────────────────
     if is_live:
         badge_color = NEOM["danger"] if api_ok else NEOM["warning"]
         badge_text  = "● LIVE — Open-Meteo API" if api_ok else "● LIVE (fallback defaults)"
@@ -675,31 +760,52 @@ def main():
     st.markdown(
         f"<span class='mode-badge' style='background:{badge_color}22;"
         f"color:{badge_color};border:1px solid {badge_color}55;'>"
-        f"{badge_text}</span>",
+        f"{badge_text}</span>"
+        f"<span class='circadian-badge' style='background:{circadian['color']}22;"
+        f"color:{circadian['color']};border:1px solid {circadian['color']}55;'>"
+        f"{circadian['badge']}</span>",
         unsafe_allow_html=True,
     )
 
+    # Circadian multiplier info bar
+    mult = circadian["multiplier"]
+    if mult != 1.0:
+        adj_type  = "elevated" if mult > 1.0 else "reduced"
+        mult_sign = f"+{int((mult - 1.0)*100)}%" if mult > 1.0 else f"{int((mult - 1.0)*100)}%"
+        st.markdown(
+            f"""
+            <div class='multiplier-box' style='background:{circadian["color"]}18;
+                 border:1px solid {circadian["color"]}44;color:{circadian["color"]};'>
+                🧬 &nbsp;<b>Circadian Rhythm Active:</b> &nbsp;
+                {circadian["desc"]} &nbsp;→&nbsp;
+                Risk score {adj_type} by <b>{mult_sign}</b>
+                (base: {base_risk:.1f}% → adjusted: <b>{risk_pct:.1f}%</b>)
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     # ════════════════════════════════════════════════════════════
-    # ROW 1 — KPI Cards
+    # ROW 1 — KPI Cards  (5 cards — adds Circadian Period)
     # ════════════════════════════════════════════════════════════
     mig_label = "Active 🦢" if migration == 1 else "Inactive"
     mig_color = NEOM["warning"] if migration == 1 else NEOM["success"]
 
-    k1, k2, k3, k4 = st.columns(4)
-    for col, label, value, sub in [
-        (k1, "Temperature",      f"{temperature} °C",  "NEOM Station"),
-        (k2, "Wind Speed",       f"{wind_speed} km/h", "Surface Level"),
-        (k3, "Migration Season", mig_label,            "Current Status"),
-        (k4, "Risk Probability", f"{risk_pct:.1f}%",   rec["level"]),
-    ]:
-        val_color = NEOM["primary"] if label != "Migration Season" else mig_color
-        risk_color = rec["color"] if label == "Risk Probability" else val_color
+    k1, k2, k3, k4, k5 = st.columns(5)
+    kpi_data = [
+        (k1, "Temperature",      f"{temperature} °C",          "NEOM Station",   NEOM["primary"]),
+        (k2, "Wind Speed",       f"{wind_speed} km/h",         "Surface Level",  NEOM["primary"]),
+        (k3, "Migration Season", mig_label,                    "Current Status", mig_color),
+        (k4, "Circadian Period", circadian["period"],          "NEOM Local Time",circadian["color"]),
+        (k5, "Risk Probability", f"{risk_pct:.1f}%",           rec["level"],     rec["color"]),
+    ]
+    for col, label, value, sub, val_color in kpi_data:
         with col:
             st.markdown(
                 f"""
                 <div class='kpi-card'>
                     <div class='kpi-label'>{label}</div>
-                    <div class='kpi-value' style='color:{risk_color};'>{value}</div>
+                    <div class='kpi-value' style='color:{val_color};font-size:1.5rem;'>{value}</div>
                     <div class='kpi-sub'>{sub}</div>
                 </div>
                 """,
@@ -716,7 +822,10 @@ def main():
     with col_left:
         st.markdown("<div class='section-header'>Risk Gauge</div>",
                     unsafe_allow_html=True)
-        st.plotly_chart(make_gauge(risk_pct), use_container_width=True)
+        st.plotly_chart(
+            make_gauge(risk_pct, multiplier=circadian["multiplier"]),
+            use_container_width=True,
+        )
 
         # Alert box
         st.markdown(
@@ -743,7 +852,7 @@ def main():
                     unsafe_allow_html=True)
         st.plotly_chart(make_scatter(df), use_container_width=True)
 
-        # Live mode: display migration auto-detection info
+        # Live mode: migration info + API cache notice
         if is_live:
             st.markdown(
                 f"""
@@ -754,6 +863,8 @@ def main():
                     ({current_month}) &nbsp;→&nbsp;
                     <span style='color:{mig_color};font-weight:700;'>{mig_label}</span>
                     &nbsp;(migration months: Mar–May &amp; Sep–Nov)
+                    &nbsp;|&nbsp;
+                    <span style='color:{NEOM["primary"]};'>🛡️ API cache: 15 min</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -762,7 +873,80 @@ def main():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ════════════════════════════════════════════════════════════
-    # ROW 3 — Monthly Risk Trend  |  Feature Importance
+    # ROW 3 — NEOM Command Center Map
+    # ════════════════════════════════════════════════════════════
+    st.markdown(
+        "<div class='section-header'>🗺️ NEOM Command Center — Geospatial View</div>",
+        unsafe_allow_html=True,
+    )
+
+    map_col, info_col = st.columns([2, 1], gap="large")
+
+    with map_col:
+        # Build map dataframe with NEOM airspace zone markers
+        map_df = pd.DataFrame({
+            "lat":   [NEOM_LAT, NEOM_LAT + 0.18, NEOM_LAT - 0.14, NEOM_LAT + 0.05],
+            "lon":   [NEOM_LON, NEOM_LON - 0.22, NEOM_LON + 0.19, NEOM_LON - 0.08],
+            "label": ["NEOM HQ", "North Airstrip", "South Corridor", "Bio-Sensor Array"],
+        })
+        st.map(
+            map_df,
+            latitude="lat",
+            longitude="lon",
+            zoom=10,
+            use_container_width=True,
+        )
+
+    with info_col:
+        st.markdown(
+            f"""
+            <div class='kpi-card' style='text-align:left;padding:20px 22px;'>
+                <div class='kpi-label' style='margin-bottom:14px;'>
+                    📍 NEOM Airspace Intelligence
+                </div>
+                <div style='font-size:0.88rem;line-height:1.8;'>
+                    <span style='color:{NEOM["primary"]};font-weight:600;'>Location:</span>
+                    NEOM Smart City, Tabuk Province<br>
+                    <span style='color:{NEOM["primary"]};font-weight:600;'>Lat / Lon:</span>
+                    {NEOM_LAT}° N &nbsp;/ {NEOM_LON}° E<br>
+                    <span style='color:{NEOM["primary"]};font-weight:600;'>Timezone:</span>
+                    Asia/Riyadh (UTC+3)<br>
+                    <span style='color:{NEOM["primary"]};font-weight:600;'>Local Time:</span>
+                    {neom_now.strftime("%H:%M:%S")}<br>
+                    <span style='color:{NEOM["primary"]};font-weight:600;'>Circadian:</span>
+                    <span style='color:{circadian["color"]};'>{circadian["period"]}</span>
+                    (×{circadian["multiplier"]})<br>
+                    <span style='color:{NEOM["primary"]};font-weight:600;'>Risk Zone:</span>
+                    <span style='color:{rec["color"]};font-weight:700;'>{rec["level"]}</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown("<br>", unsafe_allow_html=True)
+        # Circadian period breakdown reference
+        st.markdown(
+            f"""
+            <div style='background:{NEOM["accent"]};border:1px solid {NEOM["primary"]}33;
+                 border-radius:10px;padding:14px 16px;font-size:0.8rem;'>
+                <div style='color:{NEOM["primary"]};font-weight:700;margin-bottom:8px;'>
+                    🧬 Circadian Rhythm Schedule
+                </div>
+                <div style='line-height:2.0;'>
+                    <span style='color:{NEOM["dawn"]};'>🌅 Dawn 05–07h</span> → ×1.4 HIGH<br>
+                    <span style='color:{NEOM["warning"]};'>☀️ Day 07–17h</span> → ×1.0 NORMAL<br>
+                    <span style='color:{NEOM["dawn"]};'>🌆 Dusk 17–19h</span> → ×1.4 HIGH<br>
+                    <span style='color:{NEOM["muted"]};'>🌙 Night 19–05h</span> → ×0.8 LOW
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════════
+    # ROW 4 — Monthly Risk Trend  |  Feature Importance
     # ════════════════════════════════════════════════════════════
     col_a, col_b = st.columns([1.6, 1], gap="large")
 
@@ -777,7 +961,6 @@ def main():
         st.plotly_chart(make_feature_importance(importance_df),
                         use_container_width=True)
 
-        # Model metrics
         m1, m2 = st.columns(2)
         with m1:
             st.markdown(
@@ -802,13 +985,13 @@ def main():
         f"""
         <div style='text-align:center;color:{NEOM["muted"]};font-size:0.78rem;
              padding:8px 0 16px 0;'>
-            🦅 &nbsp; <b style='color:{NEOM["primary"]};'>NEOM Bio-Secure v5.0</b>
+            🦅 &nbsp; <b style='color:{NEOM["primary"]};'>NEOM Bio-Secure v6.0 Enterprise</b>
             &nbsp;·&nbsp; AI Aviation Safety Platform
-            &nbsp;·&nbsp; NEOM Smart City &nbsp;·&nbsp; 2025
+            &nbsp;·&nbsp; NEOM Smart City &nbsp;·&nbsp; 2025–2026
             <br><br>
             <span style='font-size:0.7rem;'>
-                Powered by RandomForest · Open-Meteo Weather API ·
-                Streamlit · Plotly
+                Powered by RandomForest · Open-Meteo (cached 15 min) ·
+                Circadian Rhythm Engine · Streamlit · Plotly
             </span>
         </div>
         """,
